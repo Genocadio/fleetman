@@ -126,9 +126,13 @@ are public and send no token.
 ## Tests
 
 ```bash
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter test
 ```
+
+`--no-fatal-infos` is used because Flutter 3.50 reports informational lints
+(project-wide `material.dart` deprecations and similar) that do not fail the
+build; errors and warnings are still fatal.
 
 The tests use `MockClient` from `package:http/testing.dart`; no live services or
 build-time defines are required. They cover the Nexxauth login/refresh payloads,
