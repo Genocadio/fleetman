@@ -1,0 +1,165 @@
+name: Release
+
+# Builds the Fleetman Android app and publishes it to GitHub Releases
+# whenever a version tag is pushed.
+#
+# Example:
+#   git tag v1.0.0
+#   git push origin v1.0.0
+#
+# Required repository secret:
+#   NEXXAUTH_CLIENT_ID       public ANDROID client key from Nexxauth (cli_...)
+#
+# Optional secrets (strongly recommended for distribution):
+#   NEXXAUTH_ORIGIN          defaults to android://com.example.fleetman
+#   KEYSTORE_BASE64          base64 of the release .jks
+#   KEYSTORE_PASSWORD
+#   KEY_ALIAS
+#   KEY_PASSWORD
+# Without the keystore secrets the APK is signed with Flutter's debug key.
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "[0-9]*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & publish ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      NEXXAUTH_CLIENT_ID: ${{ secrets.NEXXAUTH_CLIENT_ID }}
+      NEXXAUTH_ORIGIN: ${{ secrets.NEXXAUTH_ORIGIN }}
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.0"
+          channel: stable
+          cache: true
+
+      - name: Check required secrets
+        shell: bash
+        env:
+          CLIENT_ID: ${{ secrets.NEXXAUTH_CLIENT_ID }}
+        run: |
+          set -e
+          if [ -z "${CLIENT_ID:-}" ]; then
+            echo "::error::Missing required secret NEXXAUTH_CLIENT_ID"
+            echo "::error::Register an ANDROID client in Nexxauth and add its cli_... key under Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "NEXXAUTH_CLIENT_ID is present."
+
+      - name: Compute version
+        shell: bash
+        run: |
+          set -e
+          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          VERSION_CODE="$(git rev-list --count HEAD)"
+          if [ -z "$VERSION_NAME" ]; then
+            echo "::error::Could not determine VERSION_NAME from tag"
+            exit 1
+          fi
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "Version name: $VERSION_NAME (code $VERSION_CODE)"
+
+      - name: Install dependencies and verify
+        run: |
+          flutter --version
+          flutter pub get
+          flutter analyze
+          flutter test
+
+      - name: Build release APK
+        shell: bash
+        env:
+          CLIENT_ID: ${{ secrets.NEXXAUTH_CLIENT_ID }}
+          ORIGIN: ${{ secrets.NEXXAUTH_ORIGIN }}
+        run: |
+          set -e
+          ORIGIN="${ORIGIN:-android://com.example.fleetman}"
+          flutter build apk --release \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE" \
+            --dart-define="NEXXAUTH_CLIENT_ID=$CLIENT_ID" \
+            --dart-define="NEXXAUTH_ORIGIN=$ORIGIN"
+
+      - name: Verify APK and signature
+        shell: bash
+        run: |
+          set -e
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          if [ ! -f "$APK" ]; then
+            echo "::error::Release APK was not generated at $APK"
+            exit 1
+          fi
+          ls -lh "$APK"
+          APKSIGNER="$(
+            find "${ANDROID_HOME}/build-tools" -type f -name apksigner \
+              | sort -V | tail -1
+          )"
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner was not found under $ANDROID_HOME/build-tools"
+            exit 1
+          fi
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+
+      - name: Rename APK and generate update metadata
+        shell: bash
+        run: |
+          set -e
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          RELEASE_APK="fleetman-v${VERSION_NAME}.apk"
+          cp "$APK" "$RELEASE_APK"
+          SHA256="$(sha256sum "$RELEASE_APK" | awk '{print $1}')"
+          cat > update.json <<EOF
+          {
+            "versionName": "$VERSION_NAME",
+            "versionCode": $VERSION_CODE,
+            "apk": "$RELEASE_APK",
+            "sha256": "$SHA256"
+          }
+          EOF
+          echo "RELEASE_APK=$RELEASE_APK" >> "$GITHUB_ENV"
+          echo "Release APK: $RELEASE_APK"
+          cat update.json
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Fleetman ${{ env.VERSION_NAME }}
+          generate_release_notes: true
+          files: |
+            ${{ env.RELEASE_APK }}
+            update.json
+          fail_on_unmatched_files: true
+
+      - name: Release complete
+        run: |
+          echo "Fleetman release $VERSION_NAME ($VERSION_CODE) published from $GITHUB_REF_NAME"
