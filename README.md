@@ -76,8 +76,13 @@ expired session signs the user out.
 
 ## CI and releases (GitHub Actions)
 
-The repository ships two workflows, modelled on `twese-android`'s tag-driven
-release workflow:
+Repository: <https://github.com/Genocadio/fleetman>
+
+The Android toolchain matches Flutter 3.50's template (Gradle 9.5.0, AGP 9.3.1,
+Kotlin 2.4.20) and needs **JDK 21** for local builds too.
+
+Two workflows are shipped, modelled on `twese-android`'s tag-driven release
+workflow:
 
 - `.github/workflows/ci.yml` — on pushes and PRs to `main`: `flutter analyze`,
   `flutter test`, then a debug APK uploaded as an artifact. Uses a placeholder
