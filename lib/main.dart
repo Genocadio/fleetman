@@ -12,6 +12,7 @@ import 'auth/auth_screen.dart';
 import 'auth/credentials_manager.dart';
 import 'auth/fleet_access_gate.dart';
 import 'core/app_toast.dart' as app_toast;
+import 'offices/offices_page.dart';
 import 'requests/company_requests_page.dart';
 import 'sync/local_sync_database.dart';
 import 'sync/sync_coordinator.dart';
@@ -1105,6 +1106,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       );
                     },
+                    onOfficesTap: () {
+                      setState(() => _openDockMenu = _DockMenuType.none);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const OfficesPage(),
+                        ),
+                      );
+                    },
                     onSyncStorageTap: () {
                       setState(() => _openDockMenu = _DockMenuType.none);
                       Navigator.of(context).push(
@@ -1263,6 +1272,7 @@ class _DockMenuPanel extends StatelessWidget {
     required this.onThemeToggle,
     required this.onTemplatesTap,
     required this.onAccessRequestsTap,
+    required this.onOfficesTap,
     required this.onSyncStorageTap,
     required this.onLogout,
   });
@@ -1278,6 +1288,7 @@ class _DockMenuPanel extends StatelessWidget {
   final VoidCallback onThemeToggle;
   final VoidCallback onTemplatesTap;
   final VoidCallback onAccessRequestsTap;
+  final VoidCallback onOfficesTap;
   final VoidCallback? onSyncStorageTap;
   final VoidCallback onLogout;
 
@@ -1355,6 +1366,11 @@ class _DockMenuPanel extends StatelessWidget {
                   icon: Icons.approval_rounded,
                   label: 'Requests',
                   onTap: onAccessRequestsTap,
+                ),
+                _DockActionItem(
+                  icon: Icons.add_business_rounded,
+                  label: 'Offices',
+                  onTap: onOfficesTap,
                 ),
                 if (kDebugMode && onSyncStorageTap != null)
                   _DockActionItem(

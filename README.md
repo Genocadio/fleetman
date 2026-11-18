@@ -82,6 +82,32 @@ requests. If the driver queue is unavailable the role-access queue still loads.
 Already-handled requests get a friendly message and the list refreshes; an
 expired session signs the user out.
 
+## Offices
+
+From the profile dock choose **Offices** to see the company's offices and add
+new ones. The screen lists offices from `GET /main/offices?companyId=...` with
+their generated office code and location, and exposes a **New Office** form.
+
+The form collects:
+
+- **Name** (required) and a **location** (required), picked from the cavgotrips
+  locations already synced into Fleetman's local database via
+  `SyncRepository.searchLocations()`. The selected location's `id`, coordinates,
+  place name, custom name and place id are sent with the request.
+- Optional email, phone, address, city, contact emails and contact phones.
+
+Creation posts to `POST /main/offices`. The `companyId` in the payload comes
+from `CredentialsManager` (the signed-in manager's session) — there is no
+company selector, so a manager cannot create an office for another company.
+Backend validation errors (for example a missing `name` or `locationId`) are
+shown in the form, a 401 signs the user out, and a successful create refreshes
+the list and shows the usual top toast.
+
+> Note: `cavgocompany` has no office-creation UI, and the backend currently
+> accepts `POST /main/offices` from any authenticated user. Fleetman enforces
+> the manager-only flow client-side; server-side role/company hardening is a
+> separate backend change.
+
 ## CI and releases (GitHub Actions)
 
 Repository: <https://github.com/Genocadio/fleetman>
