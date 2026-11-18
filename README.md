@@ -21,6 +21,9 @@ flutter run --dart-define=NEXXAUTH_CLIENT_ID=cli_<fleetman-client-key>
 flutter build apk --dart-define=NEXXAUTH_CLIENT_ID=cli_<fleetman-client-key>
 ```
 
+The client key is never committed. CI reads it (and the two endpoints below)
+from GitHub Secrets and passes them as `--dart-define` arguments.
+
 `NEXXAUTH_ORIGIN` defaults to `android://com.example.fleetman` and can be
 overridden with another `--dart-define` if the client is registered with a
 different origin.
@@ -28,8 +31,13 @@ different origin.
 Do **not** use the backend's `NEXXAUTH_CLIENT_ID` / `NEXXAUTH_CLIENT_TOKEN`
 from `cavgobackend/.env.example` — those are server-side credentials.
 
-Backend calls go to the canonical gateway origin `https://api.gocavgo.com`
-(no `/api` prefix).
+Backend and Nexxauth origins follow twese-android's CI variable names and are
+injected at build time, with safe local defaults:
+
+| Define | Default |
+| --- | --- |
+| `CAVGO_BASE_URL` | `https://api.gocavgo.com` (canonical gateway, no `/api` prefix) |
+| `NEXXAUTH_BASE_URL` | `https://auth.nexxserve.dev/cavgo` |
 
 ## Fleet Manager gate
 
@@ -105,6 +113,8 @@ Actions**:
 
 | Secret | Required | Purpose |
 | --- | --- | --- |
+| `CAVGO_BASE_URL` | yes | gateway origin, e.g. `https://api.gocavgo.com` |
+| `NEXXAUTH_BASE_URL` | yes | Nexxauth origin, e.g. `https://auth.nexxserve.dev/cavgo` |
 | `NEXXAUTH_CLIENT_ID` | yes | public ANDROID Fleetman client key (`cli_...`) |
 | `NEXXAUTH_ORIGIN` | no | defaults to `android://com.example.fleetman` |
 | `KEYSTORE_BASE64` | no | base64 release keystore; without it Flutter's debug key is used |

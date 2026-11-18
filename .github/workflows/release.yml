@@ -34,6 +34,8 @@ jobs:
     timeout-minutes: 60
 
     env:
+      CAVGO_BASE_URL: ${{ secrets.CAVGO_BASE_URL }}
+      NEXXAUTH_BASE_URL: ${{ secrets.NEXXAUTH_BASE_URL }}
       NEXXAUTH_CLIENT_ID: ${{ secrets.NEXXAUTH_CLIENT_ID }}
       NEXXAUTH_ORIGIN: ${{ secrets.NEXXAUTH_ORIGIN }}
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -63,16 +65,20 @@ jobs:
 
       - name: Check required secrets
         shell: bash
-        env:
-          CLIENT_ID: ${{ secrets.NEXXAUTH_CLIENT_ID }}
         run: |
           set -e
-          if [ -z "${CLIENT_ID:-}" ]; then
-            echo "::error::Missing required secret NEXXAUTH_CLIENT_ID"
-            echo "::error::Register an ANDROID client in Nexxauth and add its cli_... key under Settings → Secrets and variables → Actions"
+          missing=""
+          for var in CAVGO_BASE_URL NEXXAUTH_BASE_URL NEXXAUTH_CLIENT_ID; do
+            if [ -z "${!var:-}" ]; then
+              missing="$missing $var"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required GitHub Secrets:$missing"
+            echo "::error::Go to Settings → Secrets and variables → Actions"
             exit 1
           fi
-          echo "NEXXAUTH_CLIENT_ID is present."
+          echo "All required secrets are present."
 
       - name: Compute version
         shell: bash
@@ -97,16 +103,15 @@ jobs:
 
       - name: Build release APK
         shell: bash
-        env:
-          CLIENT_ID: ${{ secrets.NEXXAUTH_CLIENT_ID }}
-          ORIGIN: ${{ secrets.NEXXAUTH_ORIGIN }}
         run: |
           set -e
-          ORIGIN="${ORIGIN:-android://com.example.fleetman}"
+          ORIGIN="${NEXXAUTH_ORIGIN:-android://com.example.fleetman}"
           flutter build apk --release \
             --build-name="$VERSION_NAME" \
             --build-number="$VERSION_CODE" \
-            --dart-define="NEXXAUTH_CLIENT_ID=$CLIENT_ID" \
+            --dart-define="CAVGO_BASE_URL=$CAVGO_BASE_URL" \
+            --dart-define="NEXXAUTH_BASE_URL=$NEXXAUTH_BASE_URL" \
+            --dart-define="NEXXAUTH_CLIENT_ID=$NEXXAUTH_CLIENT_ID" \
             --dart-define="NEXXAUTH_ORIGIN=$ORIGIN"
 
       - name: Verify APK and signature
