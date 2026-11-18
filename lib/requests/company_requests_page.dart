@@ -101,10 +101,7 @@ class _CompanyRequestsPageState extends State<CompanyRequestsPage> {
     );
     if (!mounted) return;
     if (ok) {
-      showTopToast(
-        context,
-        message: 'Request from ${item.fullName} rejected.',
-      );
+      showTopToast(context, message: 'Request from ${item.fullName} rejected.');
     }
   }
 
@@ -148,7 +145,7 @@ class _CompanyRequestsPageState extends State<CompanyRequestsPage> {
                     child: _ErrorBanner(
                       message: _controller.error!,
                       isDark: isDark,
-                      onRetry: _controller.load,
+                      onDismiss: _controller.dismissError,
                     ),
                   ),
                 Expanded(
@@ -263,9 +260,7 @@ class _CompanyRequestsPageState extends State<CompanyRequestsPage> {
 
   Widget _buildBody(bool isDark) {
     if (_controller.isLoading && _controller.items.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(strokeWidth: 2.5),
-      );
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2.5));
     }
 
     if (_controller.items.isEmpty) {
@@ -282,9 +277,7 @@ class _CompanyRequestsPageState extends State<CompanyRequestsPage> {
           ),
           const SizedBox(height: 14),
           Text(
-            _controller.pendingOnly
-                ? 'No pending requests'
-                : 'No requests yet',
+            _controller.pendingOnly ? 'No pending requests' : 'No requests yet',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
@@ -307,11 +300,16 @@ class _CompanyRequestsPageState extends State<CompanyRequestsPage> {
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final item = _controller.items[index];
-        final acting = _controller.isActing &&
-            _controller.actingRequestId == item.id;
+        final acting =
+            _controller.isActing && _controller.actingRequestId == item.id;
         return _RequestCard(
           item: item,
           isActing: acting,
+          isBusy: _controller.isActing,
+          actingAction: acting ? _controller.actingAction : null,
+          errorMessage: _controller.errorRequestId == item.id
+              ? _controller.error
+              : null,
           onApprove: () => _confirmApprove(item),
           onReject: () => _confirmReject(item),
         );
@@ -324,12 +322,18 @@ class _RequestCard extends StatelessWidget {
   const _RequestCard({
     required this.item,
     required this.isActing,
+    required this.isBusy,
+    this.actingAction,
+    this.errorMessage,
     required this.onApprove,
     required this.onReject,
   });
 
   final CompanyRequestItem item;
   final bool isActing;
+  final bool isBusy;
+  final RequestAction? actingAction;
+  final String? errorMessage;
   final VoidCallback onApprove;
   final VoidCallback onReject;
 
@@ -355,7 +359,9 @@ class _RequestCard extends StatelessWidget {
                       ? const Color(0xFF24484A)
                       : const Color(0xFFDCEDEB),
                   child: Text(
-                    item.fullName.isEmpty ? '?' : item.fullName[0].toUpperCase(),
+                    item.fullName.isEmpty
+                        ? '?'
+                        : item.fullName[0].toUpperCase(),
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: isDark
@@ -376,9 +382,9 @@ class _RequestCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         item.contact,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontSize: 12,
-                            ),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodyMedium?.copyWith(fontSize: 12),
                       ),
                     ],
                   ),
@@ -418,9 +424,9 @@ class _RequestCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Requested ${_formatDate(item.createdAt)}',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontSize: 11,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontSize: 11),
             ),
             if (item.isRejected &&
                 item.rejectionReason != null &&
@@ -444,24 +450,48 @@ class _RequestCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (errorMessage != null && errorMessage!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB00020).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  errorMessage!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark
+                        ? const Color(0xFFF3B9B9)
+                        : const Color(0xFF8B1E3F),
+                  ),
+                ),
+              ),
+            ],
             if (item.isPending) ...[
               const SizedBox(height: 12),
               const Divider(height: 1),
               const SizedBox(height: 8),
               if (isActing)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Center(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        SizedBox(
+                        const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2.2),
                         ),
-                        SizedBox(width: 10),
-                        Text('Updating request…'),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${actingAction?.label ?? 'Updating'} request…',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
                       ],
                     ),
                   ),
@@ -471,7 +501,7 @@ class _RequestCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: onReject,
+                      onPressed: isBusy ? null : onReject,
                       icon: Icon(
                         Icons.close_rounded,
                         size: 16,
@@ -487,7 +517,7 @@ class _RequestCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     FilledButton.icon(
-                      onPressed: onApprove,
+                      onPressed: isBusy ? null : onApprove,
                       icon: const Icon(Icons.check_rounded, size: 16),
                       label: const Text('Approve'),
                     ),
@@ -581,12 +611,12 @@ class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner({
     required this.message,
     required this.isDark,
-    required this.onRetry,
+    required this.onDismiss,
   });
 
   final String message;
   final bool isDark;
-  final VoidCallback onRetry;
+  final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -619,7 +649,7 @@ class _ErrorBanner extends StatelessWidget {
               ),
             ),
           ),
-          TextButton(onPressed: onRetry, child: const Text('Retry')),
+          TextButton(onPressed: onDismiss, child: const Text('Dismiss')),
         ],
       ),
     );
@@ -715,7 +745,8 @@ String _formatDate(String? raw) {
     'Nov',
     'Dec',
   ];
-  final time = '${local.hour.toString().padLeft(2, '0')}:'
+  final time =
+      '${local.hour.toString().padLeft(2, '0')}:'
       '${local.minute.toString().padLeft(2, '0')}';
   return '${local.day} ${months[local.month - 1]} ${local.year}, $time';
 }

@@ -5,9 +5,23 @@ import '../auth/credentials_manager.dart';
 import 'company_requests_api_client.dart';
 import 'request_models.dart';
 
+/// Which mutation is currently in flight. Exposed so the UI can show an
+/// action-specific loading state instead of a generic spinner.
+enum RequestAction { approve, reject }
+
+extension RequestActionLabel on RequestAction {
+  String get label => switch (this) {
+    RequestAction.approve => 'Approving',
+    RequestAction.reject => 'Rejecting',
+  };
+}
+
 /// Loads and acts on the request queues for the signed-in Fleet Manager's
 /// company. Kept separate from the access gate so approvals can be tested in
 /// isolation and the UI only renders state.
+///
+/// Action failures are never retried automatically: the error is surfaced, the
+/// acting state is cleared, and the user decides what to do next.
 class CompanyRequestsController extends ChangeNotifier {
   CompanyRequestsController({
     CompanyRequestsApi? api,
@@ -22,14 +36,18 @@ class CompanyRequestsController extends ChangeNotifier {
   bool _pendingOnly = true;
   bool _isLoading = false;
   bool _isActing = false;
+  RequestAction? _actingAction;
   int? _actingRequestId;
+  int? _errorRequestId;
   String? _error;
 
   List<CompanyRequestItem> get items => _items;
   bool get pendingOnly => _pendingOnly;
   bool get isLoading => _isLoading;
   bool get isActing => _isActing;
+  RequestAction? get actingAction => _actingAction;
   int? get actingRequestId => _actingRequestId;
+  int? get errorRequestId => _errorRequestId;
   String? get error => _error;
   int get pendingCount => _items.where((item) => item.isPending).length;
 
@@ -38,11 +56,27 @@ class CompanyRequestsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _clearActing() {
+    _isActing = false;
+    _actingAction = null;
+    _actingRequestId = null;
+  }
+
+  /// Dismisses the error banner without touching the queue.
+  void dismissError() {
+    if (_error == null && _errorRequestId == null) return;
+    _update(() {
+      _error = null;
+      _errorRequestId = null;
+    });
+  }
+
   Future<void> setPendingOnly(bool value) async {
     if (_pendingOnly == value) return;
     _update(() {
       _pendingOnly = value;
       _error = null;
+      _errorRequestId = null;
     });
     await load();
   }
@@ -51,6 +85,7 @@ class CompanyRequestsController extends ChangeNotifier {
     _update(() {
       _isLoading = true;
       _error = null;
+      _errorRequestId = null;
     });
 
     try {
@@ -83,7 +118,7 @@ class CompanyRequestsController extends ChangeNotifier {
     } catch (e) {
       _update(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = 'Could not load requests. ${_unexpectedMessage(e)}';
       });
     }
   }
@@ -92,76 +127,85 @@ class CompanyRequestsController extends ChangeNotifier {
   /// pending list with its authoritative status.
   Future<bool> approve(CompanyRequestItem item) => _act(
     item,
+    RequestAction.approve,
     (token, target) => _api.approve(token, target),
   );
 
   Future<bool> reject(CompanyRequestItem item, {String? reason}) => _act(
     item,
+    RequestAction.reject,
     (token, target) => _api.reject(token, target, reason: reason),
   );
 
   Future<bool> _act(
     CompanyRequestItem item,
+    RequestAction action,
     Future<CompanyRequestItem> Function(String token, CompanyRequestItem target)
-        action,
+    actionCall,
   ) async {
     if (_isActing) return false;
     _update(() {
       _isActing = true;
+      _actingAction = action;
       _actingRequestId = item.id;
       _error = null;
+      _errorRequestId = null;
     });
 
     try {
       final token = await _credentials.getAccessToken();
       if (token == null || token.isEmpty) {
         _update(() {
-          _isActing = false;
-          _actingRequestId = null;
+          _clearActing();
           _error = 'Your session has expired. Please sign in again.';
+          _errorRequestId = item.id;
         });
         return false;
       }
 
-      await action(token, item);
+      await actionCall(token, item);
+      // A successful action always refreshes so the queue is authoritative.
+      // This is a post-success refresh, not a retry of the failed call.
       await load();
-      _update(() {
-        _isActing = false;
-        _actingRequestId = null;
-      });
+      _update(_clearActing);
       return true;
     } on AccessApiUnauthorizedException {
       await _handleUnauthorized();
       return false;
     } on AccessApiException catch (e) {
-      final message = e.message.toLowerCase().contains('not pending')
-          ? 'This request was already handled. Refreshing the list.'
-          : e.message;
-      // Refresh first so a stale card is removed, then surface the friendly
-      // message. `load()` clears `_error`, so it must be set afterwards.
-      await load();
+      // No implicit refresh on failure — the user must decide what to do.
       _update(() {
-        _isActing = false;
-        _actingRequestId = null;
-        _error = message;
+        _clearActing();
+        _error = e.message;
+        _errorRequestId = item.id;
       });
       return false;
     } catch (e) {
       _update(() {
-        _isActing = false;
-        _actingRequestId = null;
-        _error = e.toString();
+        _clearActing();
+        _error =
+            'Could not ${action.label.toLowerCase()} this request. '
+            '${_unexpectedMessage(e)}';
+        _errorRequestId = item.id;
       });
       return false;
     }
+  }
+
+  String _unexpectedMessage(Object error) {
+    final text = error.toString().trim();
+    if (text.isEmpty) return 'An unexpected error occurred.';
+    if (text.startsWith('Exception:') || text.startsWith('Error:')) {
+      return text.split(':').skip(1).join(':').trim();
+    }
+    return text;
   }
 
   Future<void> _handleUnauthorized() async {
     await _credentials.signOut();
     _update(() {
       _isLoading = false;
-      _isActing = false;
-      _actingRequestId = null;
+      _clearActing();
       _error = 'Your session has expired. Please sign in again.';
     });
   }

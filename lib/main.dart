@@ -21,6 +21,7 @@ import 'sync/sync_models.dart';
 import 'sync/sync_repository.dart';
 import 'trips/trip_api_client.dart';
 import 'trips/trip_models.dart';
+import 'vehicle_registration/vehicle_registration_page.dart';
 import 'vehicles/vehicle_api_client.dart';
 import 'vehicles/vehicle_models.dart';
 
@@ -1114,6 +1115,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       );
                     },
+                    onRegisterVehicleTap: () {
+                      setState(() => _openDockMenu = _DockMenuType.none);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const VehicleRegistrationPage(),
+                        ),
+                      );
+                    },
                     onSyncStorageTap: () {
                       setState(() => _openDockMenu = _DockMenuType.none);
                       Navigator.of(context).push(
@@ -1273,6 +1282,7 @@ class _DockMenuPanel extends StatelessWidget {
     required this.onTemplatesTap,
     required this.onAccessRequestsTap,
     required this.onOfficesTap,
+    required this.onRegisterVehicleTap,
     required this.onSyncStorageTap,
     required this.onLogout,
   });
@@ -1289,6 +1299,7 @@ class _DockMenuPanel extends StatelessWidget {
   final VoidCallback onTemplatesTap;
   final VoidCallback onAccessRequestsTap;
   final VoidCallback onOfficesTap;
+  final VoidCallback onRegisterVehicleTap;
   final VoidCallback? onSyncStorageTap;
   final VoidCallback onLogout;
 
@@ -1371,6 +1382,11 @@ class _DockMenuPanel extends StatelessWidget {
                   icon: Icons.add_business_rounded,
                   label: 'Offices',
                   onTap: onOfficesTap,
+                ),
+                _DockActionItem(
+                  icon: Icons.directions_car_rounded,
+                  label: 'Register Vehicle',
+                  onTap: onRegisterVehicleTap,
                 ),
                 if (kDebugMode && onSyncStorageTap != null)
                   _DockActionItem(

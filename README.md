@@ -79,8 +79,12 @@ become `WORKER`.
 The gateway enforces company scope and role (`FLEET_MANAGER`, `SUPERVISOR` or
 `ADMIN`) on every call and refuses self-approval or stale (non-PENDING)
 requests. If the driver queue is unavailable the role-access queue still loads.
-Already-handled requests get a friendly message and the list refreshes; an
-expired session signs the user out.
+Already-handled requests get a friendly message, but a failed action is never
+retried or auto-refreshed — the list is only refreshed after a successful
+approve/reject. The acting card shows an action-specific spinner and both
+buttons stay disabled while a request is in flight. A 403 is shown as a
+permission error without signing the manager out; a 401 signs the user out.
+Errors use **Dismiss**, not **Retry**.
 
 ## Offices
 
@@ -107,6 +111,33 @@ the list and shows the usual top toast.
 > accepts `POST /main/offices` from any authenticated user. Fleetman enforces
 > the manager-only flow client-side; server-side role/company hardening is a
 > separate backend change.
+
+## Vehicle registration
+
+From the profile dock choose **Register Vehicle**. The form collects make,
+model, license plate, capacity (seats), vehicle type, device public key and an
+optional initial status (default `AVAILABLE`), with client-side validation that
+mirrors the backend.
+
+Registration posts to `POST /main/vehicles` with exactly these fields:
+`make`, `model`, `pubKey`, `capacity`, `licensePlate`, `vehicleType` and
+`status`. **No `companyCode` or `companyId` is sent**: the backend resolves the
+company from the authenticated manager's approved membership. The form still
+requires a company session before it will submit, and there is no company
+selector.
+
+The response's `initialPassword` is displayed once on a success screen with a
+copy hint and a **Done** button; it is not stored after the screen closes.
+Validation errors, duplicate plates, 403 permission errors, 401 session expiry,
+network failures and 5xx responses all get explicit messages. There is no
+automatic retry: failures use **Dismiss**, and only a successful create leaves
+the form. The submit button shows a spinner and disables the form while the
+request is in flight.
+
+> Note: the backend does not currently restrict `POST /main/vehicles` to
+> `FLEET_MANAGER` — an approved `DRIVER` or `WORKER` may also create a vehicle
+> in their own company. Fleetman exposes this only to Fleet Managers; stricter
+> server-side role enforcement is a separate backend change.
 
 ## CI and releases (GitHub Actions)
 
@@ -178,8 +209,9 @@ build; errors and warnings are still fatal.
 The tests use `MockClient` from `package:http/testing.dart`; no live services or
 build-time defines are required. They cover the Nexxauth login/refresh payloads,
 the gateway access APIs, every Fleet Manager gate state, duplicate-request
-prevention, 401 recovery, the request-queue endpoints and controller, and the
-approve/reject widget flows.
+prevention, 401 recovery, the request-queue endpoints and controller, the
+approve/reject widget flows, and vehicle registration (wire body, validation,
+one-time password, error handling and loading states).
 
 ## Live verification checklist
 
@@ -207,6 +239,14 @@ cannot run in CI:
    from two devices → the second attempt reports it was already handled.
 10. Confirm a manager never sees another company's requests or can approve
     their own request.
+11. Reject or approve a request while the network is unavailable, then confirm
+    the card shows an error with **Dismiss**, no automatic retry, and the
+    buttons are disabled only while the action is in flight.
+12. As an approved manager, open **Register Vehicle** → submit a valid vehicle
+    → confirm the device password appears once → verify the request body has no
+    `companyCode` and the vehicle belongs to the manager's company.
+13. Register a duplicate plate and a 403 case → confirm each error is shown
+    with **Dismiss** and no retry, then submit again manually.
 
 ## Removed legacy files
 

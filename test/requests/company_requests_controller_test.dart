@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fleetman/auth/access_api_client.dart';
 import 'package:fleetman/auth/auth_models.dart';
@@ -21,6 +23,7 @@ class FakeRequestsApi implements CompanyRequestsApi {
   List<CompanyRequestItem> items = [_item(1), _item(2)];
   Object? error;
   Object? actionError;
+  Future<void>? actionGate;
   int loadCalls = 0;
   int approveCalls = 0;
   int rejectCalls = 0;
@@ -47,6 +50,7 @@ class FakeRequestsApi implements CompanyRequestsApi {
     CompanyRequestItem request,
   ) async {
     approveCalls++;
+    if (actionGate != null) await actionGate;
     if (actionError != null) throw actionError!;
     return request;
   }
@@ -59,6 +63,8 @@ class FakeRequestsApi implements CompanyRequestsApi {
   }) async {
     rejectCalls++;
     rejectReason = reason;
+    if (actionGate != null) await actionGate;
+    if (actionError != null) throw actionError!;
     return request;
   }
 }
@@ -142,7 +148,10 @@ void main() {
   test('reject forwards the reason', () async {
     await controller.load();
 
-    final ok = await controller.reject(controller.items.first, reason: 'Duplicate');
+    final ok = await controller.reject(
+      controller.items.first,
+      reason: 'Duplicate',
+    );
 
     expect(ok, isTrue);
     expect(api.rejectCalls, 1);
@@ -159,7 +168,7 @@ void main() {
     expect(controller.isLoading, isFalse);
   });
 
-  test('a stale request surfaces a friendly message and refreshes', () async {
+  test('an action error is surfaced verbatim with no implicit retry', () async {
     await controller.load();
     api.actionError = AccessApiException(
       'Request is not pending — current status: APPROVED',
@@ -169,7 +178,72 @@ void main() {
     final ok = await controller.approve(controller.items.first);
 
     expect(ok, isFalse);
-    expect(controller.error, contains('already handled'));
-    expect(api.loadCalls, 2);
+    expect(
+      controller.error,
+      'Request is not pending — current status: APPROVED',
+    );
+    expect(controller.errorRequestId, 1);
+    expect(api.loadCalls, 1);
+    expect(controller.isActing, isFalse);
+    expect(controller.actingAction, isNull);
   });
+
+  test('acting state exposes which action is in flight', () async {
+    await controller.load();
+    final gate = Completer<void>();
+    api.actionGate = gate.future;
+
+    final pending = controller.reject(controller.items.first, reason: 'test');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.isActing, isTrue);
+    expect(controller.actingAction, RequestAction.reject);
+    expect(controller.actingRequestId, 1);
+
+    // A second action is ignored while one is in flight.
+    expect(await controller.approve(controller.items.first), isFalse);
+    expect(api.approveCalls, 0);
+
+    gate.complete();
+    await pending;
+    expect(controller.isActing, isFalse);
+    expect(controller.actingAction, isNull);
+  });
+
+  test(
+    'dismissing an error clears both the banner and the card marker',
+    () async {
+      await controller.load();
+      api.actionError = AccessApiException(
+        'Permission denied',
+        statusCode: 403,
+      );
+
+      await controller.approve(controller.items.first);
+      expect(controller.error, 'Permission denied');
+      expect(controller.errorRequestId, 1);
+
+      controller.dismissError();
+      expect(controller.error, isNull);
+      expect(controller.errorRequestId, isNull);
+    },
+  );
+
+  test('unexpected errors become readable messages', () async {
+    await controller.load();
+    api.actionError = const HttpExceptionLike('socket closed');
+
+    final ok = await controller.approve(controller.items.first);
+
+    expect(ok, isFalse);
+    expect(controller.error, contains('socket closed'));
+    expect(controller.isActing, isFalse);
+  });
+}
+
+class HttpExceptionLike implements Exception {
+  const HttpExceptionLike(this.message);
+  final String message;
+  @override
+  String toString() => 'Exception: $message';
 }

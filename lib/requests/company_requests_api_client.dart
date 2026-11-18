@@ -45,21 +45,29 @@ class CompanyRequestsApiClient implements CompanyRequestsApi {
     'Authorization': 'Bearer $token',
   };
 
-  Future<http.Response> _send(
-    Future<http.Response> Function() send,
-  ) async {
+  /// Every transport failure is normalised into an [AccessApiException] so the
+  /// controller never has to guess how to display an error. There is no retry
+  /// here: a failed action stays failed until the user acts again.
+  Future<http.Response> _send(Future<http.Response> Function() send) async {
     try {
       return await send();
-    } on SocketException {
-      throw const AccessApiException(_noInternetMessage, isTransient: true);
+    } on AccessApiException {
+      rethrow;
     } catch (e) {
       final lower = e.toString().toLowerCase();
-      if (lower.contains('failed host lookup') ||
+      final noInternet =
+          e is SocketException ||
+          lower.contains('failed host lookup') ||
           lower.contains('no address associated with hostname') ||
-          lower.contains('network is unreachable')) {
-        throw const AccessApiException(_noInternetMessage, isTransient: true);
-      }
-      rethrow;
+          lower.contains('network is unreachable') ||
+          lower.contains('connection timed out') ||
+          lower.contains('clientexception');
+      throw AccessApiException(
+        noInternet
+            ? _noInternetMessage
+            : 'Could not reach the server. ${e.toString()}',
+        isTransient: true,
+      );
     }
   }
 
@@ -74,14 +82,38 @@ class CompanyRequestsApiClient implements CompanyRequestsApi {
   String _errorMessage(http.Response response) {
     final decoded = _decode(response.body);
     if (decoded is Map<String, dynamic>) {
-      final message = decoded['message'] ?? decoded['error'];
-      if (message != null) return message.toString();
+      final message =
+          decoded['message'] ?? decoded['error'] ?? decoded['detail'];
+      if (message is String && message.trim().isNotEmpty) {
+        return message.trim();
+      }
+      if (message is List && message.isNotEmpty) {
+        return message.map((e) => e.toString()).join(', ');
+      }
     }
-    return 'Request failed (HTTP ${response.statusCode})';
+    if (decoded is String && decoded.trim().isNotEmpty) {
+      return decoded.trim();
+    }
+    return _statusMessage(response.statusCode);
   }
 
+  String _statusMessage(int status) {
+    return switch (status) {
+      400 =>
+        'The request could not be completed. Please check the details and try again.',
+      403 => 'You do not have permission to perform this action.',
+      404 => 'This request no longer exists.',
+      409 => 'This request was already handled by another manager.',
+      >= 500 =>
+        'The server is temporarily unavailable. Please try again later.',
+      _ => 'Request failed (HTTP $status)',
+    };
+  }
+
+  /// 401 means the session expired and must be signed out. 403 is a permission
+  /// problem — signing the manager out would hide the real cause.
   void _throwForStatus(http.Response response) {
-    if (response.statusCode == 401 || response.statusCode == 403) {
+    if (response.statusCode == 401) {
       throw const AccessApiUnauthorizedException();
     }
     if (response.statusCode >= 200 && response.statusCode < 300) return;
@@ -101,10 +133,12 @@ class CompanyRequestsApiClient implements CompanyRequestsApi {
     final path = pendingOnly
         ? '/main/company-access-requests/company/$companyId/pending'
         : '/main/company-access-requests/company/$companyId';
-    final access = await _send(() => _httpClient.get(
+    final access = await _send(
+      () => _httpClient.get(
           Uri.parse('${AppConfig.baseUrl}$path'),
           headers: _headers(accessToken),
-        ));
+      ),
+    );
     _throwForStatus(access);
 
     final pathDriver = pendingOnly
@@ -112,10 +146,12 @@ class CompanyRequestsApiClient implements CompanyRequestsApi {
         : '/main/driver-requests/company/$companyId';
     http.Response? driver;
     try {
-      driver = await _send(() => _httpClient.get(
+      driver = await _send(
+        () => _httpClient.get(
             Uri.parse('${AppConfig.baseUrl}$pathDriver'),
             headers: _headers(accessToken),
-          ));
+        ),
+      );
       _throwForStatus(driver);
     } on AccessApiException {
       // Driver requests are a separate queue; if that endpoint is unavailable
@@ -129,7 +165,9 @@ class CompanyRequestsApiClient implements CompanyRequestsApi {
     if (accessBody is List) {
       for (final raw in accessBody) {
         if (raw is Map) {
-          items.add(CompanyRequestItem.fromAccessJson(raw.cast<String, dynamic>()));
+          items.add(
+            CompanyRequestItem.fromAccessJson(raw.cast<String, dynamic>()),
+          );
         }
       }
     }
@@ -138,15 +176,21 @@ class CompanyRequestsApiClient implements CompanyRequestsApi {
       if (driverBody is List) {
         for (final raw in driverBody) {
           if (raw is Map) {
-            items.add(CompanyRequestItem.fromDriverJson(raw.cast<String, dynamic>()));
+            items.add(
+              CompanyRequestItem.fromDriverJson(raw.cast<String, dynamic>()),
+            );
           }
         }
       }
     }
 
     items.sort((a, b) {
-      final aDate = DateTime.tryParse(a.createdAt ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final bDate = DateTime.tryParse(b.createdAt ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final aDate =
+          DateTime.tryParse(a.createdAt ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate =
+          DateTime.tryParse(b.createdAt ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
       return bDate.compareTo(aDate);
     });
     return items;
@@ -158,10 +202,12 @@ class CompanyRequestsApiClient implements CompanyRequestsApi {
     CompanyRequestItem request,
   ) async {
     final path = _actionPath(request, 'approve');
-    final response = await _send(() => _httpClient.post(
+    final response = await _send(
+      () => _httpClient.post(
           Uri.parse('${AppConfig.baseUrl}$path'),
           headers: _headers(accessToken),
-        ));
+      ),
+    );
     _throwForStatus(response);
     return _parseSingle(response.body, request);
   }
@@ -173,11 +219,13 @@ class CompanyRequestsApiClient implements CompanyRequestsApi {
     String? reason,
   }) async {
     final path = _actionPath(request, 'reject');
-    final response = await _send(() => _httpClient.post(
+    final response = await _send(
+      () => _httpClient.post(
           Uri.parse('${AppConfig.baseUrl}$path'),
           headers: _headers(accessToken),
           body: jsonEncode({'reason': reason?.trim() ?? ''}),
-        ));
+      ),
+    );
     _throwForStatus(response);
     return _parseSingle(response.body, request);
   }

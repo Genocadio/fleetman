@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -19,8 +20,7 @@ Map<String, dynamic> _access({
   required int id,
   required String status,
   String createdAt = '2026-01-01T10:00:00',
-}) =>
-    {
+}) => {
       'id': id,
       'nexxauthUserId': 100 + id,
       'firstName': 'Ada',
@@ -38,8 +38,7 @@ Map<String, dynamic> _driver({
   required int id,
   required String status,
   String createdAt = '2026-01-02T10:00:00',
-}) =>
-    {
+}) => {
       'id': id,
       'nexxauthUserId': 200 + id,
       'firstName': 'Kevin',
@@ -63,8 +62,9 @@ void main() {
         return _json([_driver(id: 2, status: 'PENDING')]);
       });
 
-      final items = await CompanyRequestsApiClient(httpClient: client)
-          .fetchRequests('tok', companyId: 3);
+      final items = await CompanyRequestsApiClient(
+        httpClient: client,
+      ).fetchRequests('tok', companyId: 3);
 
       expect(paths, [
         '/main/company-access-requests/company/3',
@@ -85,8 +85,9 @@ void main() {
         return _json(<dynamic>[]);
       });
 
-      await CompanyRequestsApiClient(httpClient: client)
-          .fetchRequests('tok', companyId: 7, pendingOnly: true);
+      await CompanyRequestsApiClient(
+        httpClient: client,
+      ).fetchRequests('tok', companyId: 7, pendingOnly: true);
 
       expect(paths, [
         '/main/company-access-requests/company/7/pending',
@@ -102,8 +103,9 @@ void main() {
         return _json({'message': 'driver queue unavailable'}, statusCode: 500);
       });
 
-      final items = await CompanyRequestsApiClient(httpClient: client)
-          .fetchRequests('tok', companyId: 3);
+      final items = await CompanyRequestsApiClient(
+        httpClient: client,
+      ).fetchRequests('tok', companyId: 3);
 
       expect(items.length, 1);
       expect(items.single.kind, CompanyRequestKind.companyAccess);
@@ -117,12 +119,14 @@ void main() {
       });
       final api = CompanyRequestsApiClient(httpClient: client);
 
-      await api.approve('tok', CompanyRequestItem.fromAccessJson(
-        _access(id: 1, status: 'PENDING'),
-      ));
-      await api.approve('tok', CompanyRequestItem.fromDriverJson(
-        _driver(id: 2, status: 'PENDING'),
-      ));
+      await api.approve(
+        'tok',
+        CompanyRequestItem.fromAccessJson(_access(id: 1, status: 'PENDING')),
+      );
+      await api.approve(
+        'tok',
+        CompanyRequestItem.fromDriverJson(_driver(id: 2, status: 'PENDING')),
+      );
 
       expect(paths, [
         '/main/company-access-requests/1/approve',
@@ -140,8 +144,9 @@ void main() {
         _access(id: 1, status: 'PENDING'),
       );
 
-      await CompanyRequestsApiClient(httpClient: client)
-          .reject('tok', item, reason: ' Not in our company ');
+      await CompanyRequestsApiClient(
+        httpClient: client,
+      ).reject('tok', item, reason: ' Not in our company ');
 
       expect(captured!.url.path, '/main/company-access-requests/1/reject');
       expect(jsonDecode(captured!.body), {'reason': 'Not in our company'});
@@ -153,9 +158,64 @@ void main() {
       );
 
       await expectLater(
-        CompanyRequestsApiClient(httpClient: client)
-            .fetchRequests('tok', companyId: 3),
+        CompanyRequestsApiClient(
+          httpClient: client,
+        ).fetchRequests('tok', companyId: 3),
         throwsA(isA<AccessApiUnauthorizedException>()),
+      );
+    });
+
+    test('403 is a permission error, not an expired session', () async {
+      final client = MockClient(
+        (_) async =>
+            _json({'message': 'Company access denied'}, statusCode: 403),
+      );
+
+      try {
+        await CompanyRequestsApiClient(
+          httpClient: client,
+        ).fetchRequests('tok', companyId: 3);
+        fail('Expected a permission error');
+      } on AccessApiException catch (e) {
+        expect(e, isNot(isA<AccessApiUnauthorizedException>()));
+        expect(e.message, 'Company access denied');
+        expect(e.statusCode, 403);
+      }
+    });
+
+    test('network failures are normalised with a friendly message', () async {
+      final client = MockClient(
+        (_) async => throw const SocketException('Failed host lookup'),
+      );
+
+      await expectLater(
+        CompanyRequestsApiClient(
+          httpClient: client,
+        ).fetchRequests('tok', companyId: 3),
+        throwsA(
+          isA<AccessApiException>().having(
+            (e) => e.message,
+            'message',
+            contains('No internet connection'),
+          ),
+        ),
+      );
+    });
+
+    test('a bare 5xx gets a usable fallback message', () async {
+      final client = MockClient((_) async => http.Response('', 503));
+
+      await expectLater(
+        CompanyRequestsApiClient(
+          httpClient: client,
+        ).fetchRequests('tok', companyId: 3),
+        throwsA(
+          isA<AccessApiException>().having(
+            (e) => e.message,
+            'message',
+            contains('temporarily unavailable'),
+          ),
+        ),
       );
     });
   });
