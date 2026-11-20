@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../core/app_skeleton.dart';
 import 'sync_coordinator.dart';
 import 'sync_models.dart';
 import 'sync_repository.dart';
@@ -284,7 +285,7 @@ class _SyncDebugPageState extends State<SyncDebugPage> {
     return Scaffold(
       appBar: AppBar(),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppSkeletonList(items: 5)
           : _snapshot == null
           ? const Center(child: Text('No local data available'))
           : DefaultTabController(
@@ -432,10 +433,11 @@ class _SyncHeaderPanel extends StatelessWidget {
                       child: FilledButton.icon(
                         onPressed: syncing ? null : onSyncNow,
                         icon: syncing
-                            ? const SizedBox(
+                            ? const AppSkeleton(
                                 width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                height: 10,
+                                color: Colors.white,
+                                opacity: 0.6,
                               )
                             : const Icon(Icons.sync_rounded),
                         label: Text(syncing ? 'Syncing...' : 'Sync now'),
@@ -611,11 +613,7 @@ class _LocationsTableSection extends StatelessWidget {
           if (loadingMore)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+              child: AppSkeleton(width: 120, height: 10),
             ),
         ],
       ),
@@ -708,11 +706,7 @@ class _RoutesTableSection extends StatelessWidget {
           if (loadingMore)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+              child: AppSkeleton(width: 120, height: 10),
             ),
         ],
       ),

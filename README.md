@@ -81,8 +81,9 @@ The gateway enforces company scope and role (`FLEET_MANAGER`, `SUPERVISOR` or
 requests. If the driver queue is unavailable the role-access queue still loads.
 Already-handled requests get a friendly message, but a failed action is never
 retried or auto-refreshed — the list is only refreshed after a successful
-approve/reject. The acting card shows an action-specific spinner and both
-buttons stay disabled while a request is in flight. A 403 is shown as a
+approve/reject. The acting card shows an action-specific skeleton and both
+buttons stay disabled while a request is in flight. Pull down to refresh the
+list; there are no refresh icon buttons. A 403 is shown as a
 permission error without signing the manager out; a 401 signs the user out.
 Errors use **Dismiss**, not **Retry**.
 
@@ -131,8 +132,8 @@ copy hint and a **Done** button; it is not stored after the screen closes.
 Validation errors, duplicate plates, 403 permission errors, 401 session expiry,
 network failures and 5xx responses all get explicit messages. There is no
 automatic retry: failures use **Dismiss**, and only a successful create leaves
-the form. The submit button shows a spinner and disables the form while the
-request is in flight.
+the form. The submit button shows a skeleton placeholder and disables the form
+while the request is in flight.
 
 > Note: the backend does not currently restrict `POST /main/vehicles` to
 > `FLEET_MANAGER` — an approved `DRIVER` or `WORKER` may also create a vehicle
@@ -182,6 +183,16 @@ Actions**:
 The keystore secrets are optional for building but should be set for anything
 you distribute. They are decoded inside the runner into a git-ignored
 `android/.gradle/keystores/` directory; no signing material is committed.
+
+## UI conventions
+
+- Sign-in has no visible role-check step. The Fleet Manager gate evaluates
+  access in the background and shows a neutral skeleton until it knows which
+  screen to present.
+- Loading states use `AppSkeleton`, `AppSkeletonCard` and `AppSkeletonList`
+  rather than circular progress indicators, including button busy states.
+- Lists refresh by pulling down (`RefreshIndicator`). There are no refresh icon
+  buttons in app bars or on the access screens.
 
 ## Session recovery
 

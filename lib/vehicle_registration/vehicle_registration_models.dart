@@ -57,6 +57,29 @@ extension VehicleRegistrationStatusX on VehicleRegistrationStatus {
   };
 }
 
+enum VehicleServiceType {
+  passenger,
+  cargo,
+  passengerCargo,
+}
+
+extension VehicleServiceTypeX on VehicleServiceType {
+  String get apiValue => switch (this) {
+    VehicleServiceType.passenger => 'PASSENGER',
+    VehicleServiceType.cargo => 'CARGO',
+    VehicleServiceType.passengerCargo => 'PASSENGER_CARGO',
+  };
+
+  String get label => switch (this) {
+    VehicleServiceType.passenger => 'Passenger',
+    VehicleServiceType.cargo => 'Cargo',
+    VehicleServiceType.passengerCargo => 'Passenger + Cargo',
+  };
+
+  bool get supportsPassengers => this != VehicleServiceType.cargo;
+  bool get supportsCargo => this != VehicleServiceType.passenger;
+}
+
 /// Values collected by the native registration form.
 class VehicleRegistrationDraft {
   const VehicleRegistrationDraft({
@@ -66,6 +89,7 @@ class VehicleRegistrationDraft {
     required this.capacity,
     required this.vehicleType,
     required this.pubKey,
+    this.serviceType = VehicleServiceType.passengerCargo,
     this.status = VehicleRegistrationStatus.available,
   });
 
@@ -75,6 +99,7 @@ class VehicleRegistrationDraft {
   final int capacity;
   final VehicleRegistrationType vehicleType;
   final String pubKey;
+  final VehicleServiceType serviceType;
   final VehicleRegistrationStatus status;
 
   /// Mirrors the backend's bean validation so obvious mistakes never cause a
@@ -84,7 +109,12 @@ class VehicleRegistrationDraft {
     if (make.trim().isEmpty) return 'Enter the vehicle make.';
     if (model.trim().isEmpty) return 'Enter the vehicle model.';
     if (licensePlate.trim().isEmpty) return 'Enter the license plate.';
-    if (capacity < 1) return 'Capacity must be at least 1.';
+    if (serviceType.supportsPassengers && capacity < 1) {
+      return 'Capacity must be at least 1 for passenger-capable vehicles.';
+    }
+    if (!serviceType.supportsPassengers && capacity != 0) {
+      return 'Cargo-only vehicles must have 0 passenger seats.';
+    }
     if (pubKey.trim().isEmpty) return 'Enter the device public key.';
     return null;
   }
@@ -95,9 +125,10 @@ class VehicleRegistrationDraft {
     'make': make.trim(),
     'model': model.trim(),
     'pubKey': pubKey.trim(),
-    'capacity': capacity,
+    'capacity': serviceType.supportsPassengers ? capacity : 0,
     'licensePlate': licensePlate.trim(),
     'vehicleType': vehicleType.apiValue,
+    'serviceType': serviceType.apiValue,
     'status': status.apiValue,
   };
 }
@@ -112,6 +143,7 @@ class RegisteredVehicle {
     required this.capacity,
     required this.vehicleType,
     required this.status,
+    this.serviceType,
     this.companyId,
     this.companyName,
     this.initialPassword,
@@ -124,6 +156,7 @@ class RegisteredVehicle {
   final int capacity;
   final String vehicleType;
   final String status;
+  final String? serviceType;
   final int? companyId;
   final String? companyName;
 
@@ -138,6 +171,7 @@ class RegisteredVehicle {
       licensePlate: _text(json['licensePlate']) ?? '',
       capacity: _int(json['capacity']) ?? 0,
       vehicleType: _text(json['vehicleType']) ?? '',
+      serviceType: _text(json['serviceType']),
       status:
           _text(json['status']) ?? VehicleRegistrationStatus.available.apiValue,
       companyId: _int(json['companyId']),
@@ -156,8 +190,9 @@ class RegisteredVehicle {
       make: draft.make.trim(),
       model: draft.model.trim(),
       licensePlate: draft.licensePlate.trim(),
-      capacity: draft.capacity,
+      capacity: draft.serviceType.supportsPassengers ? draft.capacity : 0,
       vehicleType: draft.vehicleType.apiValue,
+      serviceType: draft.serviceType.apiValue,
       status: draft.status.apiValue,
       companyId: companyId,
       companyName: companyName,

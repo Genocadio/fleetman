@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/credentials_manager.dart';
+import '../core/app_skeleton.dart';
 import 'vehicle_registration_controller.dart';
 import 'vehicle_registration_models.dart';
 
@@ -34,6 +35,7 @@ class _VehicleRegistrationPageState extends State<VehicleRegistrationPage> {
   final TextEditingController _pubKeyController = TextEditingController();
 
   VehicleRegistrationType? _vehicleType;
+  VehicleServiceType _serviceType = VehicleServiceType.passengerCargo;
   VehicleRegistrationStatus _status = VehicleRegistrationStatus.available;
   String? _formError;
 
@@ -62,12 +64,15 @@ class _VehicleRegistrationPageState extends State<VehicleRegistrationPage> {
   }
 
   Future<void> _submit() async {
+    final parsedCapacity = int.tryParse(_capacityController.text.trim()) ?? 0;
+    final effectiveCapacity = _serviceType.supportsPassengers ? parsedCapacity : 0;
     final draft = VehicleRegistrationDraft(
       make: _makeController.text,
       model: _modelController.text,
       licensePlate: _plateController.text,
-      capacity: int.tryParse(_capacityController.text.trim()) ?? 0,
+      capacity: effectiveCapacity,
       vehicleType: _vehicleType ?? VehicleRegistrationType.sedan,
+      serviceType: _serviceType,
       pubKey: _pubKeyController.text,
       status: _status,
     );
@@ -225,16 +230,50 @@ class _VehicleRegistrationPageState extends State<VehicleRegistrationPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
+                        DropdownButtonFormField<VehicleServiceType>(
+                          key: const Key('vehicle-service-type-dropdown'),
+                          initialValue: _serviceType,
+                          decoration: const InputDecoration(
+                            labelText: 'Service type *',
+                            helperText: 'Default is Passenger + Cargo. Cargo-only vehicles cannot be booked and have 0 passenger seats.',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: VehicleServiceType.values
+                              .map(
+                                (type) => DropdownMenuItem<VehicleServiceType>(
+                                  value: type,
+                                  child: Text(type.label),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: busy
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _serviceType = value;
+                                    if (!value.supportsPassengers) {
+                                      _capacityController.text = '0';
+                                    } else if (_capacityController.text.trim() == '0') {
+                                      _capacityController.text = '1';
+                                    }
+                                  });
+                                },
+                        ),
+                        const SizedBox(height: 12),
                         TextField(
                           key: const Key('vehicle-capacity-field'),
                           controller: _capacityController,
-                          enabled: !busy,
+                          enabled: !busy && _serviceType.supportsPassengers,
                           keyboardType: TextInputType.number,
                           textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(
-                            labelText: 'Capacity (seats) *',
-                            hintText: 'At least 1',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: _serviceType.supportsPassengers ? 'Capacity (seats) *' : 'Capacity (seats)',
+                            hintText: _serviceType.supportsPassengers ? 'At least 1' : '0 for cargo-only vehicles',
+                            helperText: _serviceType.supportsPassengers
+                                ? 'Passenger seats available for bookings'
+                                : 'Cargo-only vehicles are not shown in passenger bookings',
+                            border: const OutlineInputBorder(),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -314,10 +353,11 @@ class _VehicleRegistrationPageState extends State<VehicleRegistrationPage> {
                   key: const Key('register-vehicle-button'),
                   onPressed: busy ? null : _submit,
                   icon: busy
-                      ? const SizedBox(
+                      ? const AppSkeleton(
                           width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2.2),
+                          height: 12,
+                          color: Colors.white,
+                          opacity: 0.6,
                         )
                       : const Icon(Icons.add_rounded),
                   label: Text(

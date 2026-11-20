@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/credentials_manager.dart';
+import '../core/app_skeleton.dart';
 import '../core/app_toast.dart';
 import '../sync/sync_models.dart';
 import 'office_models.dart';
@@ -68,16 +69,7 @@ class _OfficesPageState extends State<OfficesPage> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Offices'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _controller.isLoading ? null : _controller.load,
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Offices')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openNewOffice,
         icon: const Icon(Icons.add_business_rounded),
@@ -183,9 +175,7 @@ class _OfficesPageState extends State<OfficesPage> {
 
   Widget _buildBody(bool isDark) {
     if (_controller.isLoading && _controller.items.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(strokeWidth: 2.5),
-      );
+      return const AppSkeletonList();
     }
 
     if (_controller.items.isEmpty) {
@@ -492,10 +482,11 @@ class _OfficeFormPageState extends State<OfficeFormPage> {
                   key: const Key('create-office-button'),
                   onPressed: busy ? null : _submit,
                   icon: busy
-                      ? const SizedBox(
+                      ? const AppSkeleton(
                           width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2.2),
+                          height: 12,
+                          color: Colors.white,
+                          opacity: 0.6,
                         )
                       : const Icon(Icons.add_business_rounded),
                   label: Text(busy ? 'Creating office…' : 'Create Office'),
@@ -603,9 +594,7 @@ class _LocationPickerDialogState extends State<_LocationPickerDialog> {
               ),
             Expanded(
               child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
-                    )
+                  ? const AppSkeletonList(items: 3)
                   : _results.isEmpty
                       ? const Center(
                           child: Text('No locations found. Sync trips data first.'),

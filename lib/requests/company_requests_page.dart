@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/credentials_manager.dart';
+import '../core/app_skeleton.dart';
 import '../core/app_toast.dart';
 import 'company_requests_controller.dart';
 import 'request_models.dart';
@@ -111,16 +112,7 @@ class _CompanyRequestsPageState extends State<CompanyRequestsPage> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Requests'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _controller.isLoading ? null : _controller.load,
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Requests')),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -260,7 +252,7 @@ class _CompanyRequestsPageState extends State<CompanyRequestsPage> {
 
   Widget _buildBody(bool isDark) {
     if (_controller.isLoading && _controller.items.isEmpty) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2.5));
+      return const AppSkeletonList();
     }
 
     if (_controller.items.isEmpty) {
@@ -482,11 +474,7 @@ class _RequestCard extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2.2),
-                        ),
+                        const AppSkeleton(width: 18, height: 12),
                         const SizedBox(width: 10),
                         Text(
                           '${actingAction?.label ?? 'Updating'} request…',

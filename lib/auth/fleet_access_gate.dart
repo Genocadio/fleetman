@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/app_skeleton.dart';
 import 'fleet_access_controller.dart';
 
 /// Wraps the main app UI and only unlocks it for approved Fleet Managers.
@@ -70,6 +71,8 @@ class _FleetAccessScreenState extends State<FleetAccessScreen> {
     super.dispose();
   }
 
+  Future<void> _onRefresh() => widget.controller.refresh();
+
   Future<void> _submit() async {
     final code = _companyCodeController.text.trim();
     if (code.isEmpty) {
@@ -95,12 +98,19 @@ class _FleetAccessScreenState extends State<FleetAccessScreen> {
       case FleetAccessState.allowed:
         content = const SizedBox.shrink();
       case FleetAccessState.checking:
+        // The access check runs silently after sign-in. Never surface a
+        // role-checking step in the UI — show a neutral branded placeholder
+        // until the gate knows which screen to present.
         content = const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 20),
-            Text('Checking your Fleet Manager access…'),
+            Icon(Icons.local_shipping_outlined, size: 48),
+            SizedBox(height: 18),
+            AppSkeleton(width: 180, height: 14),
+            SizedBox(height: 10),
+            AppSkeleton(width: 120, height: 11),
+            SizedBox(height: 18),
+            SizedBox(width: 260, child: AppSkeletonCard(lines: 1)),
           ],
         );
       case FleetAccessState.needsRoleRequest:
@@ -140,10 +150,11 @@ class _FleetAccessScreenState extends State<FleetAccessScreen> {
               child: FilledButton(
                 onPressed: controller.busy ? null : _submit,
                 child: controller.busy
-                    ? const SizedBox(
+                    ? const AppSkeleton(
                         width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        height: 12,
+                        color: Colors.white,
+                        opacity: 0.6,
                       )
                     : const Text('Request access'),
               ),
@@ -171,10 +182,10 @@ class _FleetAccessScreenState extends State<FleetAccessScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 22),
-            OutlinedButton.icon(
-              onPressed: controller.busy ? null : controller.refresh,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Check again'),
+            Text(
+              'Pull down to check again.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         );
@@ -199,10 +210,10 @@ class _FleetAccessScreenState extends State<FleetAccessScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 22),
-            OutlinedButton.icon(
-              onPressed: controller.busy ? null : controller.refresh,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Check again'),
+            Text(
+              'Pull down to check again.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         );
@@ -254,10 +265,10 @@ class _FleetAccessScreenState extends State<FleetAccessScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 22),
-            FilledButton.icon(
-              onPressed: controller.busy ? null : controller.refresh,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
+            Text(
+              'Pull down to try again.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         );
@@ -275,27 +286,31 @@ class _FleetAccessScreenState extends State<FleetAccessScreen> {
           ),
         ),
         child: SafeArea(
-          child: Center(
+          child: RefreshIndicator(
+            onRefresh: _onRefresh,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      content,
-                      const SizedBox(height: 20),
-                      TextButton.icon(
-                        onPressed: controller.signOut,
-                        icon: const Icon(Icons.logout),
-                        label: const Text('Sign out'),
-                      ),
-                    ],
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: Center(
+                child: Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        content,
+                        const SizedBox(height: 20),
+                        TextButton.icon(
+                          onPressed: controller.signOut,
+                          icon: const Icon(Icons.logout),
+                          label: const Text('Sign out'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../core/app_skeleton.dart';
 import 'auth_api_client.dart';
 import 'auth_models.dart';
 import 'credentials_manager.dart';
@@ -208,14 +209,12 @@ class _AuthScreenState extends State<AuthScreen> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                child: _isLoading 
-                                  ? const SizedBox(
+                                child: _isLoading
+                                  ? const AppSkeleton(
                                       width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2.5,
-                                      ),
+                                      height: 12,
+                                      color: Colors.white,
+                                      opacity: 0.6,
                                     )
                                   : const Text(
                                       'Login',

@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'auth/auth_screen.dart';
 import 'auth/credentials_manager.dart';
 import 'auth/fleet_access_gate.dart';
+import 'core/app_skeleton.dart';
 import 'core/app_toast.dart' as app_toast;
 import 'offices/offices_page.dart';
 import 'requests/company_requests_page.dart';
@@ -1023,9 +1024,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_isInitialHydrating) {
                     if (index == tailCursor) {
                       return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        padding: EdgeInsets.symmetric(vertical: 6),
+                        child: Column(
+                          children: [
+                            AppSkeletonCard(lines: 3),
+                            SizedBox(height: 10),
+                            AppSkeletonCard(),
+                          ],
                         ),
                       );
                     }
@@ -1040,10 +1045,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_isLoadingMore) {
                     if (index == tailCursor) {
                       return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        ),
+                        padding: EdgeInsets.symmetric(vertical: 6),
+                        child: AppSkeletonCard(lines: 1),
                       );
                     }
                     tailCursor += 1;
@@ -2315,7 +2318,7 @@ class _VehicleConfigPageState extends State<VehicleConfigPage>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (_isTripsLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppSkeletonList(items: 4);
     }
 
     if (_tripsLoadError != null) {
@@ -2374,7 +2377,7 @@ class _VehicleConfigPageState extends State<VehicleConfigPage>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (_isTripsLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppSkeletonList(items: 4);
     }
 
     if (_tripsLoadError != null) {
@@ -4105,7 +4108,17 @@ class _VehicleConfigPageState extends State<VehicleConfigPage>
                           ),
                           const SizedBox(height: 10),
                           if (_isTripsLoading)
-                            const Center(child: CircularProgressIndicator())
+                            const SizedBox(
+                              width: 220,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  AppSkeleton(height: 12),
+                                  SizedBox(height: 8),
+                                  AppSkeleton(width: 160, height: 10),
+                                ],
+                              ),
+                            )
                           else if (_tripsLoadError != null)
                             Text(
                               'Failed to load current trip.',
